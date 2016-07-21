@@ -54,7 +54,7 @@ public final class MemoryAccess {
 	public static native void memset(long ptr, int value, long bytes);
 
 	// The standard C memcpy function
-	private static native void memcpy(long dst, long src, long bytes);
+	public static native void memcpy(long dst, long src, long bytes);
 
 	// Primitive getters
 
