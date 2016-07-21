@@ -11,7 +11,7 @@ import static org.lwjgl.system.APIUtil.*;
 import static org.lwjgl.system.MemoryUtil.*;
 
 /** Provides {@link MemoryAccessor} implementations. The most efficient available will be used by {@link MemoryUtil}. */
-final class MemoryAccess {
+public final class MemoryAccess {
 
 	static {
 		Library.initialize();
@@ -51,7 +51,7 @@ final class MemoryAccess {
 	// -----------
 
 	// The standard C memset function
-	private static native void memset(long ptr, int value, long bytes);
+	public static native void memset(long ptr, int value, long bytes);
 
 	// The standard C memcpy function
 	private static native void memcpy(long dst, long src, long bytes);
