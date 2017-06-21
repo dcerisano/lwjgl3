@@ -1,32 +1,28 @@
-/* 
+/*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
  */
 package org.lwjgl.opengl
 
 import org.lwjgl.generator.*
 
-class BufferObject(val binding: String): ParameterModifier() {
-	companion object: ModifierKey<BufferObject>
+class BufferObject(val binding: String) : ParameterModifier {
+    override val isSpecial = true
+    override fun validate(param: Parameter) {
+        if (!((param.nativeType is PointerType && param.nativeType.mapping !== PointerMapping.OPAQUE_POINTER) || param.nativeType.mapping === PrimitiveMapping.POINTER))
+            throw IllegalArgumentException("The BufferObject modifier can only be applied on data pointer types or long primitives.")
 
-	override val isSpecial = true
-	override fun validate(param: Parameter) {
-		if ( !((param.nativeType is PointerType && param.nativeType.mapping !== PointerMapping.OPAQUE_POINTER) || param.nativeType.mapping === PrimitiveMapping.POINTER) )
-			throw IllegalArgumentException("The BufferObject modifier can only be applied on data pointer types or long primitives.")
-
-		when ( this ) {
-			PIXEL_PACK_BUFFER, QUERY_BUFFER_AMD ->
-				{
-					if ( param.paramType !== ParameterType.OUT )
-						throw IllegalArgumentException("The specified BufferObject modifier can only be applied on output parameters.")
-				}
-			else                                ->
-				{
-					if ( param.paramType !== ParameterType.IN )
-						throw IllegalArgumentException("The specified BufferObject modifier can only be applied on input parameters.")
-				}
-		}
-	}
+        when (this) {
+            PIXEL_PACK_BUFFER, QUERY_BUFFER_AMD -> {
+                if (param.paramType !== ParameterType.OUT)
+                    throw IllegalArgumentException("The specified BufferObject modifier can only be applied on output parameters.")
+            }
+            else                                -> {
+                if (param.paramType !== ParameterType.IN)
+                    throw IllegalArgumentException("The specified BufferObject modifier can only be applied on input parameters.")
+            }
+        }
+    }
 }
 
 val ARRAY_BUFFER = BufferObject("GL15.GL_ARRAY_BUFFER_BINDING")

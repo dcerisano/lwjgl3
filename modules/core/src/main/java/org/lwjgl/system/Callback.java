@@ -1,16 +1,17 @@
 /*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
  */
 package org.lwjgl.system;
 
-import org.lwjgl.PointerBuffer;
+import org.lwjgl.*;
 
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 
 import static org.lwjgl.system.MemoryStack.*;
 import static org.lwjgl.system.MemoryUtil.*;
 import static org.lwjgl.system.dyncall.DynCallback.*;
+import static org.lwjgl.system.jni.JNINativeInterface.*;
 
 /**
  * Base class for dynamically created native functions that call into Java code.
@@ -19,182 +20,192 @@ import static org.lwjgl.system.dyncall.DynCallback.*;
  */
 public abstract class Callback implements Pointer, NativeResource {
 
-	private static final long
-		VOID,
-		BOOLEAN,
-		BYTE,
-		SHORT,
-		INT,
-		LONG,
-		FLOAT,
-		DOUBLE,
-		PTR;
+    private static final boolean DEBUG_ALLOCATOR = Configuration.DEBUG_MEMORY_ALLOCATOR.get(false);
 
-	static {
-		// Setup native callbacks
-		try ( MemoryStack stack = stackPush() ) {
-			Class<?>[] params = new Class<?>[] { long.class };
+    private static final long
+        VOID,
+        BOOLEAN,
+        BYTE,
+        SHORT,
+        INT,
+        LONG,
+        FLOAT,
+        DOUBLE,
+        PTR;
 
-			Method[] methods = new Method[] {
-				CallbackI.V.class.getDeclaredMethod("callback", params),
-				CallbackI.Z.class.getDeclaredMethod("callback", params),
-				CallbackI.B.class.getDeclaredMethod("callback", params),
-				CallbackI.S.class.getDeclaredMethod("callback", params),
-				CallbackI.I.class.getDeclaredMethod("callback", params),
-				CallbackI.J.class.getDeclaredMethod("callback", params),
-				CallbackI.F.class.getDeclaredMethod("callback", params),
-				CallbackI.D.class.getDeclaredMethod("callback", params),
-				CallbackI.P.class.getDeclaredMethod("callback", params)
-			};
+    static {
+        // Setup native callbacks
+        try (MemoryStack stack = stackPush()) {
+            Class<?>[] params = new Class<?>[] {long.class};
 
-			PointerBuffer callbacks = stack.mallocPointer(methods.length);
+            Method[] methods = new Method[] {
+                CallbackI.V.class.getDeclaredMethod("callback", params),
+                CallbackI.Z.class.getDeclaredMethod("callback", params),
+                CallbackI.B.class.getDeclaredMethod("callback", params),
+                CallbackI.S.class.getDeclaredMethod("callback", params),
+                CallbackI.I.class.getDeclaredMethod("callback", params),
+                CallbackI.J.class.getDeclaredMethod("callback", params),
+                CallbackI.F.class.getDeclaredMethod("callback", params),
+                CallbackI.D.class.getDeclaredMethod("callback", params),
+                CallbackI.P.class.getDeclaredMethod("callback", params)
+            };
 
-			getNativeCallbacks(methods, memAddress(callbacks));
+            PointerBuffer callbacks = stack.mallocPointer(methods.length);
 
-			VOID = callbacks.get();
-			BOOLEAN = callbacks.get();
-			BYTE = callbacks.get();
-			SHORT = callbacks.get();
-			INT = callbacks.get();
-			LONG = callbacks.get();
-			FLOAT = callbacks.get();
-			DOUBLE = callbacks.get();
-			PTR = callbacks.get();
-		} catch (Exception e) {
-			throw new IllegalStateException("Failed to initialize native callbacks.", e);
-		}
+            getNativeCallbacks(methods, memAddress(callbacks));
 
-		MemoryUtil.getAllocator();
-	}
+            VOID = callbacks.get();
+            BOOLEAN = callbacks.get();
+            BYTE = callbacks.get();
+            SHORT = callbacks.get();
+            INT = callbacks.get();
+            LONG = callbacks.get();
+            FLOAT = callbacks.get();
+            DOUBLE = callbacks.get();
+            PTR = callbacks.get();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to initialize native callbacks.", e);
+        }
 
-	private long address;
+        MemoryUtil.getAllocator();
+    }
 
-	/**
-	 * Creates a callback instance using the specified dyncall signature
-	 *
-	 * @param signature the dyncall signature
-	 */
-	protected Callback(String signature) {
-		this.address = create(signature, this);
-	}
+    private long address;
 
-	/**
-	 * Creates a callback instance using the specified function address
-	 *
-	 * @param address the function address
-	 */
-	protected Callback(long address) {
-		this.address = address;
-	}
+    /**
+     * Creates a callback instance using the specified dyncall signature
+     *
+     * @param signature the dyncall signature
+     */
+    protected Callback(String signature) {
+        this.address = create(signature, this);
+    }
 
-	@Override
-	public long address() {
-		return address;
-	}
+    /**
+     * Creates a callback instance using the specified function address
+     *
+     * @param address the function address
+     */
+    protected Callback(long address) {
+        this.address = address;
+    }
 
-	@Override
-	public void free() {
-		Callback.free(address());
-	}
+    @Override
+    public long address() {
+        return address;
+    }
 
-	private static native long getNativeCallbacks(Method[] methods, long callbacks);
+    @Override
+    public void free() {
+        Callback.free(address());
+    }
 
-	public static String __stdcall(String signature) {
-		return Platform.get() == Platform.WINDOWS && Pointer.BITS32 ? "_s" + signature : signature;
-	}
+    private static native long getNativeCallbacks(Method[] methods, long callbacks);
 
-	/**
-	 * Creates a native function that delegates to the specified instance when called.
-	 *
-	 * <p>The native function uses the default calling convention.</p>
-	 *
-	 * @param signature the {@code dyncall} function signature
-	 * @param instance  the callback instance
-	 *
-	 * @return the dynamically generated native function
-	 */
-	static long create(String signature, Object instance) {
-		long funcptr = Callback.getNativeFunction(signature.charAt(signature.length() - 1));
+    public static String __stdcall(String signature) {
+        return Platform.get() == Platform.WINDOWS && Pointer.BITS32 ? "_s" + signature : signature;
+    }
 
-		long handle = dcbNewCallback(signature, funcptr, memNewGlobalRef(instance));
-		if ( handle == NULL )
-			throw new IllegalStateException("Failed to create the DCCallback object");
+    /**
+     * Creates a native function that delegates to the specified instance when called.
+     *
+     * <p>The native function uses the default calling convention.</p>
+     *
+     * @param signature the {@code dyncall} function signature
+     * @param instance  the callback instance
+     *
+     * @return the dynamically generated native function
+     */
+    static long create(String signature, Object instance) {
+        long funcptr = Callback.getNativeFunction(signature.charAt(signature.length() - 1));
 
-		if ( Configuration.DEBUG_MEMORY_ALLOCATOR.get(false) )
-			MemoryManage.DebugAllocator.track(handle, 2 * POINTER_SIZE);
+        long handle = dcbNewCallback(signature, funcptr, NewGlobalRef(instance));
+        if (handle == NULL) {
+            throw new IllegalStateException("Failed to create the DCCallback object");
+        }
 
-		return handle;
-	}
+        if (DEBUG_ALLOCATOR) {
+            MemoryManage.DebugAllocator.track(handle, 2 * POINTER_SIZE);
+        }
 
-	private static long getNativeFunction(char type) {
-		switch ( type ) {
-			case 'v':
-				return VOID;
-			case 'B':
-				return BOOLEAN;
-			case 'c':
-				return BYTE;
-			case 's':
-				return SHORT;
-			case 'i':
-				return INT;
-			case 'l':
-				return LONG;
-			case 'p':
-				return PTR;
-			case 'f':
-				return FLOAT;
-			case 'd':
-				return DOUBLE;
-			default:
-				throw new IllegalArgumentException();
-		}
-	}
+        return handle;
+    }
 
-	/**
-	 * Converts the specified function pointer to the {@code CallbackI} instance associated with it.</p>
-	 *
-	 * @param functionPointer a function pointer
-	 * @param <T>             the {@code CallbackI} instance type
-	 *
-	 * @return the {@code CallbackI} instance, or null if the function pointer is {@code NULL}.
-	 */
-	public static <T extends CallbackI> T get(long functionPointer) {
-		if ( functionPointer == NULL )
-			return null;
+    private static long getNativeFunction(char type) {
+        switch (type) {
+            case 'v':
+                return VOID;
+            case 'B':
+                return BOOLEAN;
+            case 'c':
+                return BYTE;
+            case 's':
+                return SHORT;
+            case 'i':
+                return INT;
+            case 'l':
+                return LONG;
+            case 'p':
+                return PTR;
+            case 'f':
+                return FLOAT;
+            case 'd':
+                return DOUBLE;
+            default:
+                throw new IllegalArgumentException();
+        }
+    }
 
-		return memGlobalRefToObject(dcbGetUserData(functionPointer));
-	}
+    /**
+     * Converts the specified function pointer to the {@code CallbackI} instance associated with it.</p>
+     *
+     * @param functionPointer a function pointer
+     * @param <T>             the {@code CallbackI} instance type
+     *
+     * @return the {@code CallbackI} instance, or null if the function pointer is {@code NULL}.
+     */
+    public static <T extends CallbackI> T get(long functionPointer) {
+        if (functionPointer == NULL) {
+            return null;
+        }
 
-	/**
-	 * Frees any resources held by the specified function pointer.
-	 *
-	 * @param functionPointer the function pointer
-	 */
-	public static void free(long functionPointer) {
-		memDeleteGlobalRef(dcbGetUserData(functionPointer));
-		dcbFreeCallback(functionPointer);
+        return memGlobalRefToObject(dcbGetUserData(functionPointer));
+    }
 
-		if ( Configuration.DEBUG_MEMORY_ALLOCATOR.get(false) )
-			MemoryManage.DebugAllocator.untrack(functionPointer);
-	}
+    /**
+     * Frees any resources held by the specified function pointer.
+     *
+     * @param functionPointer the function pointer
+     */
+    public static void free(long functionPointer) {
+        DeleteGlobalRef(dcbGetUserData(functionPointer));
+        dcbFreeCallback(functionPointer);
 
-	public boolean equals(Object o) {
-		if ( this == o ) return true;
-		if ( !(o instanceof Callback) ) return false;
+        if (DEBUG_ALLOCATOR) {
+            MemoryManage.DebugAllocator.untrack(functionPointer);
+        }
+    }
 
-		Callback that = (Callback)o;
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof Callback)) {
+            return false;
+        }
 
-		return address == that.address();
-	}
+        Callback that = (Callback)o;
 
-	public int hashCode() {
-		return (int)(address ^ (address >>> 32));
-	}
+        return address == that.address();
+    }
 
-	@Override
-	public String toString() {
-		return String.format("%s pointer [0x%X]", getClass().getSimpleName(), address);
-	}
+    public int hashCode() {
+        return (int)(address ^ (address >>> 32));
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s pointer [0x%X]", getClass().getSimpleName(), address);
+    }
 
 }

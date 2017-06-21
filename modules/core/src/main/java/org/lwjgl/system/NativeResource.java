@@ -1,6 +1,6 @@
 /*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
  */
 package org.lwjgl.system;
 
@@ -12,12 +12,12 @@ package org.lwjgl.system;
  */
 public interface NativeResource extends AutoCloseable {
 
-	/** Frees any native resources held by this object. */
-	void free();
+    /** Frees any native resources held by this object. */
+    void free();
 
-	@Override
-	default void close() {
-		free();
-	}
+    @Override
+    default void close() {
+        free();
+    }
 
 }

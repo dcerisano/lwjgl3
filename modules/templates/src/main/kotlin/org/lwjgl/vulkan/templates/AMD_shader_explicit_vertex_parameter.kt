@@ -1,64 +1,71 @@
 /*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
+ * MACHINE GENERATED FILE, DO NOT EDIT
  */
 package org.lwjgl.vulkan.templates
 
 import org.lwjgl.generator.*
 import org.lwjgl.vulkan.*
 
-val AMD_shader_explicit_vertex_parameter = "AMDShaderExplicitVertexParameter".nativeClassVK("AMD_shader_explicit_vertex_parameter", postfix = AMD) {
-	documentation =
-		"""
-		When the {@code VK_AMD_shader_explicit_vertex_parameter} device extension is enabled  the application $can pass a SPIR-V module to
-		#CreateShaderModule() that uses the {@code SPV_AMD_shader_explicit_vertex_parameter} SPIR-V extension.
+val AMD_shader_explicit_vertex_parameter = "AMDShaderExplicitVertexParameter".nativeClassVK("AMD_shader_explicit_vertex_parameter", type = "device", postfix = AMD) {
+    documentation =
+        """
+        This extension adds support for the following SPIR-V extension in {apiname}:
 
-		When the {@code VK_AMD_shader_explicit_vertex_parameter} device extension is enabled the {@code CustomInterpAMD} interpolation decoration $can also be
-		used with fragment shader inputs which indicate that the decorated inputs $can only be accessed by the extended instruction
-		{@code InterpolateAtVertexAMD} and allows accessing the value of the inputs for individual vertices of the primitive.
+        <ul>
+            <li>SPV_AMD_shader_explicit_vertex_parameter</li>
+        </ul>
 
-		When the {@code VK_AMD_shader_explicit_vertex_parameter} device extension is enabled inputs $can be also decorated with the {@code CustomInterpAMD}
-		interpolation decoration, including fragment shader inputs that are signed or unsigned integers, integer vectors, or any double-precision
-		floating-point type. Inputs decorated with {@code CustomInterpAMD} $can only be accessed by the extended instruction {@code InterpolateAtVertexAMD} and
-		allows accessing the value of the input for individual vertices of the primitive.
+        <dl>
+            <dt><b>Name String</b></dt>
+            <dd>VK_AMD_shader_explicit_vertex_parameter</dd>
 
-		The {@code BaryCoordNoPerspAMD} decoration $can be used to decorate a fragment shader input variable. This variable will contain the (I,J) pair of the
-		barycentric coordinates corresponding to the fragment evaluated using linear interpolation at the pixel's center. The K coordinate of the barycentric
-		coordinates $can be derived given the identity I + J + K = 1.0.
+            <dt><b>Extension Type</b></dt>
+            <dd>Device extension</dd>
 
-		The {@code BaryCoordNoPerspCentroidAMD} decoration $can be used to decorate a fragment shader input variable. This variable will contain the (I,J) pair
-		of the barycentric coordinates corresponding to the fragment evaluated using linear interpolation at the centroid. The K coordinate of the barycentric
-		coordinates $can be derived given the identity I + J + K = 1.0.
+            <dt><b>Registered Extension Number</b></dt>
+            <dd>22</dd>
 
-		The {@code BaryCoordNoPerspCentroidAMD} decoration $can be used to decorate a fragment shader input variable. This variable will contain the (I,J) pair
-		of the barycentric coordinates corresponding to the fragment evaluated using linear interpolation at each covered sample. The K coordinate of the
-		barycentric coordinates $can be derived given the identity I + J + K = 1.0.
+            <dt><b>Last Modified Date</b></dt>
+            <dd>2016-05-10</dd>
 
-		The {@code BaryCoordPullModelAMD} decoration $can be used to decorate a fragment shader input variable. This variable will contain (1/W, 1/I, 1/J)
-		evaluated at the pixel center and $can be used to calculate gradients and then interpolate I, J, and W at any desired sample location.
+            <dt><b>Revision</b></dt>
+            <dd>1</dd>
 
-		The {@code BaryCoordSmoothAMD} decoration $can be used to decorate a fragment shader input variable. This variable will contain the (I,J) pair of the
-		barycentric coordinates corresponding to the fragment evaluated using perspective interpolation at the pixel's center. The K coordinate of the
-		barycentric coordinates $can be derived given the identity I + J + K = 1.0.
+            <dt><b>IP Status</b></dt>
+            <dd>No known IP claims.</dd>
 
-		The {@code BaryCoordSmoothCentroidAMD} decoration $can be used to decorate a fragment shader input variable. This variable will contain the (I,J) pair
-		of the barycentric coordinates corresponding to the fragment evaluated using perspective interpolation at the centroid. The K coordinate of the
-		barycentric coordinates can: be derived given the identity I + J + K = 1.0.
+            <dt><b>Dependencies</b></dt>
+            <dd><ul>
+                <li>This extension is written against version 1.0.11 of the Vulkan API.</li>
+            </ul></dd>
 
-		The {@code BaryCoordSmoothCentroidAMD} decoration $can be used to decorate a fragment shader input variable. This variable will contain the (I,J) pair
-		of the barycentric coordinates corresponding to the fragment evaluated using perspective interpolation at each covered sample. The K coordinate of the
-		barycentric coordinates can: be derived given the identity I + J + K = 1.0.
-		"""
+            <dt><b>Contributors</b></dt>
+            <dd><ul>
+                <li>Matthaeus G. Chajdas, AMD</li>
+                <li>Qun Lin, AMD</li>
+                <li>Daniel Rakos, AMD</li>
+                <li>Graham Sellers, AMD</li>
+                <li>Rex Xu, AMD</li>
+            </ul></dd>
 
-	IntConstant(
-		"The extension specification version.",
+            <dt><b>Contacts</b></dt>
+            <dd><ul>
+                <li>Qun Lin, AMD (mailto:quentin.lin@amd.com[quentin.lin@amd.com])</li>
+            </ul></dd>
+        </dl>
+        """
 
-		"AMD_SHADER_EXPLICIT_VERTEX_PARAMETER_SPEC_VERSION".."1"
-	)
+    IntConstant(
+        "The extension specification version.",
 
-	StringConstant(
-		"The extension name.",
+        "AMD_SHADER_EXPLICIT_VERTEX_PARAMETER_SPEC_VERSION".."1"
+    )
 
-		"AMD_SHADER_EXPLICIT_VERTEX_PARAMETER_EXTENSION_NAME".."VK_AMD_shader_explicit_vertex_parameter"
-	)
+    StringConstant(
+        "The extension name.",
+
+        "AMD_SHADER_EXPLICIT_VERTEX_PARAMETER_EXTENSION_NAME".."VK_AMD_shader_explicit_vertex_parameter"
+    )
 }

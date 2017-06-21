@@ -1,153 +1,162 @@
-/* 
+/*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
  */
 package org.lwjgl.generator
 
-import org.lwjgl.generator.ParameterType.IN
-import org.lwjgl.generator.ParameterType.OUT
+import org.lwjgl.generator.ParameterType.*
 
-/** Super class of Parameter and ReturnValue with common helper properties. */
-abstract class QualifiedType(
-	val nativeType: NativeType
-) : TemplateElement() {
-
-	override val isSpecial: Boolean
-		get() = isBufferPointer || super.isSpecial
-
-	internal val isBufferPointer: Boolean
-		get() = nativeType.isPointerData
-
-	internal val javaMethodType: String
-		get() = nativeType.javaMethodType
-
-	internal fun toNativeType(binding: APIBinding?, pointerMode: Boolean = false): String {
-		val builder = StringBuilder()
-
-		if ( has(const) )
-			builder.append("const ")
-
-		if ( binding == null || this === JNI_ENV || (nativeType is StructType && !nativeType.includesPointer) ) {
-			builder.append(nativeType.name)
-			if ( nativeType is PointerType && !nativeType.includesPointer && (pointerMode || nativeType !is StructType) ) {
-				if ( !nativeType.name.endsWith('*') )
-					builder.append(' ')
-				builder.append('*')
-			}
-		} else {
-			// map everything to plain types, this avoids having to specify the native types explicitly or via #includes
-			builder.append(
-				if ( this.nativeType.let { it.mapping === PrimitiveMapping.POINTER || it is PointerType } )
-					"intptr_t"
-				else
-					nativeType.jniFunctionType
-			)
-		}
-
-		return builder.toString()
-	}
-
+/** A parameter or return value. */
+interface QualifiedType {
+    val nativeType: NativeType
 }
 
-class ReturnValue(nativeType: NativeType) : QualifiedType(nativeType) {
+internal val QualifiedType.hasUnsafe
+    get() = (nativeType is PointerType && (nativeType.mapping !== PointerMapping.OPAQUE_POINTER || nativeType is CallbackType)) || nativeType is StructType
 
-	override fun hashCode() = RESULT.hashCode()
+internal val QualifiedType.isBufferPointer
+    get() = nativeType.let { it is PointerType && it.mapping !== PointerMapping.OPAQUE_POINTER && it.elementType !is StructType }
 
-	override fun equals(other: Any?) = other === this || (other is ReturnValue && other.nativeType == this.nativeType)
+internal val QualifiedType.javaMethodType
+    get() = nativeType.javaMethodType
 
-	// --- [ Helper functions & properties ] ---
+class ReturnValue(override val nativeType: NativeType) : QualifiedType {
 
-	internal val isVoid: Boolean
-		get() = nativeType.mapping === TypeMapping.VOID
+    override fun hashCode() = RESULT.hashCode()
+
+    override fun equals(other: Any?) = other === this || (other is ReturnValue && other.nativeType == this.nativeType)
+
+    // --- [ Helper functions & properties ] ---
+
+    internal val isSpecial
+        get() = (hasUnsafe && nativeType !is ArrayType)
+
+    internal val isVoid
+        get() = nativeType.mapping === TypeMapping.VOID
+
+    internal val isStructValue
+        get() = nativeType is StructType
+
+    internal fun toNativeType(hasConst: Boolean, binding: APIBinding?) =
+        if (binding == null || isStructValue) {
+            nativeType.name.let {
+                if (nativeType is PointerType && !nativeType.includesPointer) {
+                    if (!it.endsWith('*')) "$it *" else "$it*"
+                } else
+                    it
+            }
+        } else {
+            if (nativeType.mapping === PrimitiveMapping.POINTER || nativeType is PointerType)
+                "intptr_t"
+            else
+                nativeType.jniFunctionType
+        }.let {
+            if (hasConst && binding == null) // const intptr is pointless and raises a warning on GCC/Clang
+                "const $it"
+            else
+                it
+        }
 
 }
 
 enum class ParameterType {
-	IN,
-	OUT,
-	INOUT
+    IN,
+    OUT,
+    INOUT
 }
 
 class Parameter(
-	nativeType: NativeType,
-	val name: String,
-	val paramType: ParameterType = IN,
-	documentation: String,
-	links: String,
-	linkMode: LinkMode
-) : QualifiedType(nativeType) {
+    override val nativeType: NativeType,
+    val name: String,
+    val paramType: ParameterType = IN,
+    val documentation: (() -> String)?
+) : ModifierTarget<ParameterModifier>(), QualifiedType {
 
-	internal val documentation = if ( links.isEmpty() ) documentation else linkMode.appendLinks(documentation, links)
+    constructor(
+        nativeType: NativeType,
+        name: String,
+        paramType: ParameterType,
+        javadoc: String,
+        links: String,
+        linkMode: LinkMode
+    ) : this(nativeType, name, paramType, if (javadoc.isNotEmpty() || links.isNotEmpty()) {
+        val documentation: (() -> String)? = { if (links.isEmpty()) javadoc else linkMode.appendLinks(javadoc, links) }
+        documentation
+    } else
+        null
+    )
 
-	override fun hashCode() = name.hashCode()
+    override fun hashCode() = name.hashCode()
 
-	override fun equals(other: Any?) = other === this || (other is Parameter && other.name.equals(this.name))
+    override fun equals(other: Any?) = other === this || (other is Parameter && other.name == this.name)
 
-	// --- [ Helper functions & properties ] ----
+    // --- [ Helper functions & properties ] ----
 
-	override val isSpecial: Boolean
-		get() = super.isSpecial || when ( nativeType.mapping ) {
-			PointerMapping.OPAQUE_POINTER -> (nativeType is ObjectType || !has(nullable)) && this !== JNI_ENV
-			PrimitiveMapping.BOOLEAN4 -> true
-			else -> false
-		}
+    internal val isSpecial
+        get() = (hasUnsafe && nativeType !is ArrayType) || when (nativeType.mapping) {
+            PointerMapping.OPAQUE_POINTER -> (nativeType is ObjectType || !has(nullable)) && this !== JNI_ENV
+            PrimitiveMapping.BOOLEAN4     -> true
+            else                          -> false
+        } || modifiers.any { it.value.isSpecial }
 
-	/** Returns true if this is an output parameter with the AutoSizeResult modifier. */
-	internal val isAutoSizeResultOut: Boolean
-		get() = paramType === OUT && has(AutoSizeResultParam)
+    /** Returns true if this is an output parameter with the AutoSizeResult modifier. */
+    internal val isAutoSizeResultOut
+        get() = paramType === OUT && has<AutoSizeResultParam>()
 
-	internal val asNativeMethodParam: String
-		get() = "${nativeType.nativeMethodType} $name"
+    internal fun isArrayParameter(autoSizeResultOutParams: Int) = nativeType.mapping.isArray && (!isAutoSizeResultOut || autoSizeResultOutParams != 1)
 
-	internal fun asNativeMethodCallParam(func: NativeClassFunction, mode: GenerationMode) = when {
-		nativeType is StructType || nativeType is ObjectType ->
-			if ( has(nullable) )
-				"$name == null ? NULL : $name.$ADDRESS"
-			else if ( nativeType is ObjectType && func.hasUnsafeMethod && func.nativeClass.binding!!.hasParameterCapabilities )
-				name
-			else
-				"$name.$ADDRESS"
-		nativeType.isPointerData                             ->
-			if ( nativeType is ArrayType )
-				name
-			else if ( !isAutoSizeResultOut && (has(nullable) || (has(optional) && mode === GenerationMode.NORMAL)) )
-				"memAddressSafe($name)"
-			else
-				"memAddress($name)"
-		nativeType.mapping == PrimitiveMapping.BOOLEAN4      -> "$name ? 1 : 0"
-		else                                                 -> name
-	}
+    internal fun toNativeType(binding: APIBinding?, pointerMode: Boolean = false) =
+        if (binding == null || this === JNI_ENV || nativeType is StructType) {
+            nativeType.name.let {
+                if ((nativeType is PointerType && !nativeType.includesPointer) || (pointerMode && nativeType is StructType)) {
+                    if (!it.endsWith('*')) "$it *" else "$it*"
+                } else
+                    it
+            }
+        } else {
+            if (nativeType.mapping === PrimitiveMapping.POINTER || nativeType is PointerType)
+                "intptr_t"
+            else
+                nativeType.jniFunctionType
+        }.let {
+            if (has(const))
+                "const $it"
+            else
+                it
+        }
 
-	internal fun removeArrayModifiers(): Parameter {
-		if ( has(optional) && has(MultiType) )
-			modifiers.remove(Nullable::class.java)
+    override fun validate(modifier: ParameterModifier) = modifier.validate(this)
 
-		modifiers.remove(PointerArray::class.java)
-		modifiers.remove(Return::class.java)
-		modifiers.remove(SingleValue::class.java)
-		modifiers.remove(MultiType::class.java)
+    internal fun copyModifiers(other: Parameter): Parameter {
+        if (other.hasModifiers())
+            this._modifiers = HashMap(other.modifiers)
+        return this
+    }
 
-		return this
-	}
+    internal fun removeArrayModifiers(): Parameter {
+        if (has(optional) && has<MultiType>())
+            _modifiers.remove(Nullable::class)
 
-}
+        _modifiers.remove(PointerArray::class)
+        _modifiers.remove(Return::class)
+        _modifiers.remove(SingleValue::class)
+        _modifiers.remove(MultiType::class)
 
-// DSL extensions
+        return this
+    }
 
-operator fun ReturnValueModifier.rangeTo(returnType: NativeType): ReturnValue {
-	val returns = ReturnValue(returnType)
-	returns.setModifiers(this)
-	return returns
-}
+    /**
+     * If this parameter has a modifier of the specified type, it replaces it with the result of the specified function.
+     *
+     * @param replaceWith a function that takes the current modifier and returns the new one
+     *
+     * @return this parameter
+     */
+    internal inline fun <reified T : ParameterModifier> replaceModifier(replaceWith: (T) -> T): Parameter {
+        if (this.has<T>())
+            _modifiers[T::class] = replaceWith(this.get<T>())
 
-operator fun QualifiedTypeModifier.rangeTo(returnType: NativeType): ReturnValue {
-	val returns = ReturnValue(returnType)
-	returns.setModifiers(this)
-	return returns
-}
+        return this
+    }
 
-operator fun Array<TemplateModifier>.rangeTo(returnType: NativeType): ReturnValue {
-	val returns = ReturnValue(returnType)
-	returns.setModifiers(*this)
-	return returns
 }

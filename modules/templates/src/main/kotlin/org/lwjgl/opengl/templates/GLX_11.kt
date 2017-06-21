@@ -1,47 +1,47 @@
-/* 
+/*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
  */
 package org.lwjgl.opengl.templates
 
 import org.lwjgl.generator.*
-import org.lwjgl.system.linux.*
 import org.lwjgl.opengl.*
+import org.lwjgl.system.linux.*
 
 val GLX11 = "GLX11".nativeClassGLX("GLX11") {
-	documentation = "Native bindings to GLX 1.1."
+    documentation = "Native bindings to GLX 1.1."
 
-	IntConstant(
-		"Names for attributes to #GetClientString().",
+    IntConstant(
+        "Names for attributes to #GetClientString().",
 
-		"VENDOR"..0x1,
-		"VERSION"..0x2,
-		"EXTENSIONS"..0x3
-	)
+        "VENDOR"..0x1,
+        "VERSION"..0x2,
+        "EXTENSIONS"..0x3
+    )
 
-	(const..charASCII_p)(
-		"QueryExtensionsString",
-		"Returns a string describing which GLX extensions are supported on the connection.",
+    const..charASCII_p(
+        "QueryExtensionsString",
+        "Returns a string describing which GLX extensions are supported on the connection.",
 
-		DISPLAY,
-		int.IN("screen", "the screen number")
-	)
+        DISPLAY,
+        int.IN("screen", "the screen number")
+    )
 
-	(const..charASCII_p)(
-		"GetClientString",
-		"Returns a pointer to a string describing some aspect of the client library.",
+    const..charASCII_p(
+        "GetClientString",
+        "Returns a pointer to a string describing some aspect of the client library.",
 
-		DISPLAY,
-		int.IN("name", "the string to query")
-	)
+        DISPLAY,
+        int.IN("name", "the string to query")
+    )
 
-	(const..charASCII_p)(
-		"QueryServerString",
-		"Returns a pointer to a string describing some aspect of the server's GLX extension.",
+    const..charASCII_p(
+        "QueryServerString",
+        "Returns a pointer to a string describing some aspect of the server's GLX extension.",
 
-		DISPLAY,
-		int.IN("screen", "the screen number"),
-		int.IN("name", "the string to query")
-	)
+        DISPLAY,
+        int.IN("screen", "the screen number"),
+        int.IN("name", "the string to query")
+    )
 
 }

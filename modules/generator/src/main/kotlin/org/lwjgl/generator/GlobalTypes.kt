@@ -1,15 +1,13 @@
-/* 
+/*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
  */
 package org.lwjgl.generator
 
 val void = NativeType("void", TypeMapping.VOID)
-val voidptr = "void".p
-val voidptr_p = voidptr.p
+val opaque_p = "void".p
 val void_p = PointerType("void", PointerMapping.DATA)
 val void_pp = void_p.p
-val void_p_const_p = void_p.p_const_p
 
 val bool = PrimitiveType("bool", PrimitiveMapping.BOOLEAN)
 val char = IntegerType("char", PrimitiveMapping.BYTE)
@@ -34,6 +32,8 @@ val ptrdiff_t = IntegerType("ptrdiff_t", PrimitiveMapping.POINTER)
 val intptr_t = IntegerType("intptr_t", PrimitiveMapping.POINTER)
 val uintptr_t = IntegerType("uintptr_t", PrimitiveMapping.POINTER, unsigned = true)
 
+val va_list = "va_list".p
+
 val bool_p = bool.p
 val char_p = char.p
 val short_p = short.p
@@ -44,7 +44,9 @@ val float_pp = float_p.p
 val double_p = double.p
 val size_t_p = size_t.p
 
+val int32_t_p = int32_t.p
 val uint32_t_p = uint32_t.p
+val uint64_t_p = uint64_t.p
 
 val char_pp = char_p.p
 
@@ -59,26 +61,9 @@ val unsigned_int_p = unsigned_int.p
 // strings
 
 val charASCII = CharType("char", CharMapping.ASCII) // for struct members
-val charASCII_p = CharSequenceType(charASCII)
+val charASCII_p = charASCII.p
 val charASCII_pp = charASCII_p.p
 
 val charUTF8 = CharType("char", CharMapping.UTF8) // for struct members
-val charUTF8_p = CharSequenceType(charUTF8)
+val charUTF8_p = charUTF8.p
 val charUTF8_pp = charUTF8_p.p
-
-// JNI types
-
-val jboolean = IntegerType("jboolean", PrimitiveMapping.BOOLEAN)
-val jbyte = IntegerType("jbyte", PrimitiveMapping.BYTE)
-val jchar = IntegerType("jchar", PrimitiveMapping.SHORT, unsigned = true)
-val jshort = IntegerType("jshort", PrimitiveMapping.SHORT)
-val jint = IntegerType("jint", PrimitiveMapping.INT)
-val jlong = IntegerType("jlong", PrimitiveMapping.LONG)
-
-val jfloat = IntegerType("jfloat", PrimitiveMapping.FLOAT)
-val jdouble = IntegerType("jdouble", PrimitiveMapping.DOUBLE)
-
-val jobject = NativeType("jobject", TypeMapping("jobject", Any::class.java, Any::class.java))
-val jobject_p = "jobject".opaque_p
-
-val JNIEnv_p = "JNIEnv".p

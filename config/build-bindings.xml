@@ -1,88 +1,82 @@
 <!--
-Copyright LWJGL. All rights reserved.
-License terms: http://lwjgl.org/license.php
+  ~ Copyright LWJGL. All rights reserved.
+  ~ License terms: https://www.lwjgl.org/license
+  -->
 
+<!--
 Defines which library bindings will be build with LWJGL.
 
 This script is included in /config/build-definitions.xml.
 -->
 <project name="bindings" basedir="../">
 
-	<!-- // ========== BINDING FLAGS ======== // -->
+    <property name="binding.DISABLE_CHECKS" value="false"/>
 
-	<property name="binding.egl" value="true"/>
-	<property name="binding.glfw" value="true"/>
-	<property name="binding.jawt" value="true"/>
-	<property name="binding.jemalloc" value="true"/>
-	<property name="binding.lmdb" value="true"/>
-	<property name="binding.nanovg" value="true"/>
-	<property name="binding.nfd" value="true"/>
-	<property name="binding.nuklear" value="true"/>
-	<property name="binding.openal" value="true"/>
-	<property name="binding.opencl" value="true"/>
-	<property name="binding.opengl" value="true"/>
-	<property name="binding.opengles" value="true"/>
-	<property name="binding.par" value="true"/>
-	<property name="binding.sse" value="true"/>
-	<property name="binding.stb" value="true"/>
-	<property name="binding.tinyfd" value="true"/>
-	<property name="binding.vulkan" value="true"/>
-	<property name="binding.xxhash" value="true"/>
+    <!-- // ========== BINDING FLAGS ======== // -->
 
-	<!-- Set the path to the Oculus SDK to enable. -->
-	<property name="OCULUS_SDK_PATH" location="../OculusSDK" relative="false"/>
+    <property name="binding.assimp" value="true"/>
+    <property name="binding.bgfx" value="true"/>
+    <property name="binding.egl" value="true"/>
+    <property name="binding.glfw" value="true"/>
+    <property name="binding.jawt" value="true"/>
+    <property name="binding.jemalloc" value="true"/>
+    <property name="binding.lmdb" value="true"/>
+    <property name="binding.nanovg" value="true"/>
+    <property name="binding.nfd" value="true"/>
+    <property name="binding.nuklear" value="true"/>
+    <property name="binding.openal" value="true"/>
+    <property name="binding.opencl" value="true"/>
+    <property name="binding.opengl" value="true"/>
+    <property name="binding.opengles" value="true"/>
+    <property name="binding.openvr" value="true"/>
+    <property name="binding.par" value="true"/>
+    <property name="binding.sse" value="true"/>
+    <property name="binding.stb" value="true"/>
+    <property name="binding.tinyexr" value="true"/>
+    <property name="binding.tinyfd" value="true"/>
+    <property name="binding.vulkan" value="true"/>
+    <property name="binding.xxhash" value="true"/>
+    <property name="binding.yoga" value="true"/>
 
-	<!-- // ================================ // -->
+    <!-- Set the path to the Oculus SDK to enable. -->
+    <property name="OCULUS_SDK_PATH" location="../OculusSDK" relative="false"/>
 
-	<target name="bindings">
-		<condition property="binding.ovr" value="true" else="false">
-			<and>
-				<isset property="OCULUS_SDK_PATH"/>
-				<available file="${OCULUS_SDK_PATH}/LibOVR/Include/OVR_CAPI.h"/>
-			</and>
-		</condition>
+    <!-- // ================================ // -->
 
-		<local name="dependency_problem"/>
-		<condition property="dependency_problem" value="1">
-			<and>
-				<or>
-					<!--<istrue value="${binding.glfw}"/>-->
-					<istrue value="${binding.ovr}"/>
-				</or>
-				<isfalse value="${binding.opengl}"/>
-			</and>
-		</condition>
-		<fail if="check_dependencies" message="The OpenGL bindings are required."/>
+    <target name="bindings">
+        <condition property="binding.ovr" value="true" else="false">
+            <and>
+                <isset property="OCULUS_SDK_PATH"/>
+                <available file="${OCULUS_SDK_PATH}/LibOVR/Include/OVR_CAPI.h"/>
+            </and>
+        </condition>
 
-		<condition property="dependency_problem" value="1">
-			<and>
-				<istrue value="${binding.nanovg}"/>
-				<or>
-					<isfalse value="${binding.stb}"/>
-					<and>
-						<isfalse value="${binding.opengl}"/>
-						<isfalse value="${binding.opengles}"/>
-					</and>
-				</or>
-			</and>
-		</condition>
-		<fail if="dependency_problem" message="The stb and OpenGL or OpenGL ES bindings are required."/>
+        <local name="dependency_problem"/>
+        <condition property="dependency_problem" value="1">
+            <and>
+                <istrue value="${binding.ovr}"/>
 
-		<local name="bindings.list"/>
-		<script language="javascript">
-			var jvmargs = [];
+                <and>
+                    <isfalse value="${binding.opengl}"/>
+                    <isfalse value="${binding.vulkan}"/>
+                </and>
+            </and>
+        </condition>
+        <fail if="dependency_problem" message="The OpenGL or Vulkan bindings are required."/>
 
-			var props = LWJGL.getProperties().entrySet().iterator();
-			while ( props.hasNext() ) {
-				var prop = props.next();
-				var name = prop.getKey();
-				if ( name.startsWith("binding.") &amp;&amp; name.indexOf('_') === -1 &amp;&amp; prop.getValue() == "true" )
-					jvmargs.push("-D" + name + "=true");
-			}
-
-			LWJGL.setProperty("bindings.list", jvmargs.join(" "));
-		</script>
-		<property name="bindings" value="${bindings.list}"/>
-	</target>
+        <condition property="dependency_problem" value="1">
+            <and>
+                <istrue value="${binding.nanovg}"/>
+                <or>
+                    <isfalse value="${binding.stb}"/>
+                    <and>
+                        <isfalse value="${binding.opengl}"/>
+                        <isfalse value="${binding.opengles}"/>
+                    </and>
+                </or>
+            </and>
+        </condition>
+        <fail if="dependency_problem" message="The stb and OpenGL or OpenGL ES bindings are required."/>
+    </target>
 
 </project>

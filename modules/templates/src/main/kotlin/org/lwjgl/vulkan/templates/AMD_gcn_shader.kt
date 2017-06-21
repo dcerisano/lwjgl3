@@ -1,72 +1,70 @@
 /*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
+ * MACHINE GENERATED FILE, DO NOT EDIT
  */
 package org.lwjgl.vulkan.templates
 
 import org.lwjgl.generator.*
 import org.lwjgl.vulkan.*
 
-val AMD_gcn_shader = "AMDGCNShader".nativeClassVK("AMD_gcn_shader", postfix = AMD) {
-	documentation =
-		"""
-		This extension adds support for the {@code SPV_AMD_gcn_shader} SPIR-V extension in Vulkan.
+val AMD_gcn_shader = "AMDGCNShader".nativeClassVK("AMD_gcn_shader", type = "device", postfix = AMD) {
+    documentation =
+        """
+        This extension adds support for the following SPIR-V extension in {apiname}:
 
-		This extension is written to provide the functionality of the {@code GL_AMD_gcn_shader}, OpenGL Shading Language Specification extension, for SPIR-V.
+        <ul>
+            <li>SPV_AMD_gcn_shader</li>
+        </ul>
 
-		This extension exposes miscellaneous features of the AMD "Graphics Core Next" shader architecture. This includes cube map query functions and a
-		functionality to query the elapsed shader core time.
+        <dl>
+            <dt><b>Name String</b></dt>
+            <dd>VK_AMD_gcn_shader</dd>
 
-		This extension adds the following extended instructions:
+            <dt><b>Extension Type</b></dt>
+            <dd>Device extension</dd>
 
-		<h3>CubeFaceCoordAMD</h3>
+            <dt><b>Registered Extension Number</b></dt>
+            <dd>26</dd>
 
-		The function {@code CubeFaceCoordAMD} returns a two-component floating point vector that represents the 2D texture coordinates that would be used for accessing
-		the selected cube map face for the given cube map texture coordinates given as parameter P.
+            <dt><b>Last Modified Date</b></dt>
+            <dd>2016-05-30</dd>
 
-		The operand {@code P} must be a pointer to a 3-component 32-bit floating-point vector.
+            <dt><b>Revision</b></dt>
+            <dd>1</dd>
 
-		This instruction is only valid in Fragment, Geometry, GLCompute, TessellationControl, TessellationEvaluation and Vertex execution models.
+            <dt><b>IP Status</b></dt>
+            <dd>No known IP claims.</dd>
 
-		<h3>CubeFaceIndexAMD</h3>
+            <dt><b>Dependencies</b></dt>
+            <dd><ul>
+                <li>This extension is written against version 1.0.15 of the Vulkan API.</li>
+            </ul></dd>
 
-		The function {@code CubeFaceIndexAMD} returns a single floating point value that represents the index of the cube map face that would be accessed by
-		texture lookup functions for the cube map texture coordinates given as parameter. The returned value correspond to cube map faces as follows:
-		${ul(
-			"0.0 for the cube map face facing the positive X direction",
-			"1.0 for the cube map face facing the negative X direction",
-			"2.0 for the cube map face facing the positive Y direction",
-			"3.0 for the cube map face facing the negative Y direction",
-			"4.0 for the cube map face facing the positive Z direction",
-			"5.0 for the cube map face facing the negative Z direction"
-		)}
+            <dt><b>Contributors</b></dt>
+            <dd><ul>
+                <li>Dominik Witczak, AMD</li>
+                <li>Daniel Rakos, AMD</li>
+                <li>Rex Xu, AMD</li>
+                <li>Graham Sellers, AMD</li>
+            </ul></dd>
 
-		The operand {@code P} must be a 3-component 32-bit floating-point vector.
+            <dt><b>Contacts</b></dt>
+            <dd><ul>
+                <li>Dominik Witczak, AMD (mailto:dominik.witczak@amd.com[dominik.witczak@amd.com])</li>
+            </ul></dd>
+        </dl>
+        """
 
-		This instruction is only valid in Fragment, Geometry, GLCompute, TessellationControl, TessellationEvaluation and Vertex execution models.
+    IntConstant(
+        "The extension specification version.",
 
-		<h3>TimeAMD</h3>
+        "AMD_GCN_SHADER_SPEC_VERSION".."1"
+    )
 
-		The {@code TimeAMD} function returns a 64-bit value representing the current execution clock as seen by the shader processor. Time monotonically
-		increments as the processor executes instructions. The returned time will wrap after it exceeds the maximum value representable in 64 bits. The units
-		of time are not defined and need not be constant. Time is not dynamically uniform. That is, shader invocations executing as part of a single draw or
-		dispatch will not necessarily see the same value of time. Time is also not guaranteed to be consistent across shader stages. For example, there is no
-		requirement that time sampled inside a fragment shader invocation will be greater than the time sampled in the vertex that lead to its execution.
+    StringConstant(
+        "The extension name.",
 
-		This instruction is only valid in Fragment, Geometry, GLCompute, TessellationControl, TessellationEvaluation and Vertex execution models.
-
-		Use of this instruction requires declaration of the {@code Int64} capability.
-		"""
-
-	IntConstant(
-		"The extension specification version.",
-
-		"AMD_GCN_SHADER_SPEC_VERSION".."1"
-	)
-
-	StringConstant(
-		"The extension name.",
-
-		"AMD_GCN_SHADER_EXTENSION_NAME".."VK_AMD_gcn_shader"
-	)
+        "AMD_GCN_SHADER_EXTENSION_NAME".."VK_AMD_gcn_shader"
+    )
 }

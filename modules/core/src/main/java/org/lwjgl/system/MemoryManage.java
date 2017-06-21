@@ -1,347 +1,318 @@
 /*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
  */
 package org.lwjgl.system;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.*;
+import java.util.Map.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
 import static org.lwjgl.system.APIUtil.*;
 import static org.lwjgl.system.MemoryUtil.*;
-import static org.lwjgl.system.libc.Stdlib.*;
+import static org.lwjgl.system.StackWalkUtil.*;
+import static org.lwjgl.system.libc.LibCStdlib.*;
 
 /** Provides {@link MemoryAllocator} implementations for {@link MemoryUtil} to use. */
 final class MemoryManage {
 
-	private MemoryManage() {
-	}
+    private MemoryManage() {
+    }
 
-	static MemoryAllocator getInstance() {
-		Object allocator = Configuration.MEMORY_ALLOCATOR.get("jemalloc");
-		if ( allocator instanceof MemoryAllocator )
-			return (MemoryAllocator)allocator;
+    static MemoryAllocator getInstance() {
+        Object allocator = Configuration.MEMORY_ALLOCATOR.get();
+        if (allocator instanceof MemoryAllocator) {
+            return (MemoryAllocator)allocator;
+        }
 
-		if ( "jemalloc".equals(allocator) ) {
-			try {
-				// check if the jemalloc library is available
-				Class<?> JEmallocAllocator = Class.forName("org.lwjgl.system.jemalloc.JEmallocAllocator");
-				return (MemoryAllocator)JEmallocAllocator.getConstructor().newInstance();
-			} catch (Throwable t) {
-				if ( Checks.DEBUG )
-					t.printStackTrace(DEBUG_STREAM);
-				apiLog("[MemoryAllocator] Failed to load the jemalloc library.");
-				return new StdlibAllocator();
-			}
-		} else if ( "system".equals(allocator) ) {
-			return new StdlibAllocator();
-		} else {
-			try {
-				return (MemoryAllocator)Class.forName(allocator.toString()).getConstructor().newInstance();
-			} catch (Throwable t) {
-				throw new RuntimeException("Failed to instantiate custom memory allocator: " + allocator);
-			}
-		}
-	}
+        if (!"system".equals(allocator)) {
+            String className = allocator == null || "jemalloc".equals(allocator)
+                ? "org.lwjgl.system.jemalloc.JEmallocAllocator"
+                : allocator.toString();
 
-	/** stdlib memory allocator. */
-	private static class StdlibAllocator implements MemoryAllocator {
+            try {
+                Class<?> allocatorClass = Class.forName(className);
+                return (MemoryAllocator)allocatorClass.getConstructor().newInstance();
+            } catch (Throwable t) {
+                if (Checks.DEBUG && allocator != null) {
+                    t.printStackTrace(DEBUG_STREAM);
+                }
+                apiLog(String.format("Warning: Failed to instantiate memory allocator: %s. Using the system default.", className));
+            }
+        }
 
-		@Override
-		public long getMalloc() { return MemoryAccess.malloc(); }
+        return new StdlibAllocator();
+    }
 
-		@Override
-		public long getCalloc() { return MemoryAccess.calloc(); }
+    /** stdlib memory allocator. */
+    private static class StdlibAllocator implements MemoryAllocator {
 
-		@Override
-		public long getRealloc() { return MemoryAccess.realloc(); }
+        @Override public long getMalloc()                              { return MemoryAccessJNI.malloc; }
+        @Override public long getCalloc()                              { return MemoryAccessJNI.calloc; }
+        @Override public long getRealloc()                             { return MemoryAccessJNI.realloc; }
+        @Override public long getFree()                                { return MemoryAccessJNI.free; }
+        @Override public long getAlignedAlloc()                        { return MemoryAccessJNI.aligned_alloc; }
+        @Override public long getAlignedFree()                         { return MemoryAccessJNI.aligned_free; }
 
-		@Override
-		public long getFree() { return MemoryAccess.free(); }
+        @Override public long malloc(long size)                        { return nmalloc(size); }
+        @Override public long calloc(long num, long size)              { return ncalloc(num, size); }
+        @Override public long realloc(long ptr, long size)             { return nrealloc(ptr, size); }
+        @Override public void free(long ptr)                           { nfree(ptr); }
+        @Override public long aligned_alloc(long alignment, long size) { return naligned_alloc(alignment, size); }
+        @Override public void aligned_free(long ptr)                   { naligned_free(ptr); }
 
-		@Override
-		public long getAlignedAlloc() { return MemoryAccess.aligned_alloc(); }
+    }
 
-		@Override
-		public long getAlignedFree() { return MemoryAccess.aligned_free(); }
+    /** Wraps a MemoryAllocator to track allocations and detect memory leaks. */
+    static class DebugAllocator implements MemoryAllocator {
 
-		@Override
-		public long malloc(long size) {
-			return nmalloc(size);
-		}
+        private static final ConcurrentMap<Long, Allocation> ALLOCATIONS = new ConcurrentHashMap<>();
+        private static final ConcurrentMap<Long, String>     THREADS     = new ConcurrentHashMap<>();
 
-		@Override
-		public long calloc(long num, long size) {
-			return ncalloc(num, size);
-		}
+        private final MemoryAllocator allocator;
 
-		@Override
-		public long realloc(long ptr, long size) {
-			return nrealloc(ptr, size);
-		}
+        DebugAllocator(MemoryAllocator allocator) {
+            this.allocator = allocator;
 
-		@Override
-		public void free(long ptr) {
-			nfree(ptr);
-		}
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                if (ALLOCATIONS.isEmpty()) {
+                    return;
+                }
 
-		@Override
-		public long aligned_alloc(long alignment, long size) {
-			return naligned_alloc(alignment, size);
-		}
+                for (Entry<Long, Allocation> entry : ALLOCATIONS.entrySet()) {
+                    Long       address    = entry.getKey();
+                    Allocation allocation = entry.getValue();
 
-		@Override
-		public void aligned_free(long ptr) {
-			naligned_free(ptr);
-		}
+                    DEBUG_STREAM.format(
+                        "[LWJGL] %d bytes leaked, thread %d (%s), address: 0x%s\n",
+                        allocation.size,
+                        allocation.threadId,
+                        THREADS.get(allocation.threadId),
+                        Long.toHexString(address).toUpperCase()
+                    );
+                    for (Object el : allocation.stackTrace) {
+                        DEBUG_STREAM.format("\tat %s\n", el.toString());
+                    }
+                }
+            }));
+        }
 
-	}
+        @Override public long getMalloc()       { return allocator.getMalloc(); }
+        @Override public long getCalloc()       { return allocator.getCalloc(); }
+        @Override public long getRealloc()      { return allocator.getRealloc(); }
+        @Override public long getFree()         { return allocator.getFree(); }
+        @Override public long getAlignedAlloc() { return allocator.getAlignedAlloc(); }
+        @Override public long getAlignedFree()  { return allocator.getAlignedFree(); }
 
-	// TODO: evaluate performance and optimize
+        @Override public long malloc(long size) {
+            return track(allocator.malloc(size), size);
+        }
 
-	/** Wraps a MemoryAllocator to track allocations and detect memory leaks. */
-	static class DebugAllocator implements MemoryAllocator {
+        @Override
+        public long calloc(long num, long size) {
+            return track(allocator.calloc(num, size), num * size);
+        }
 
-		private static final ConcurrentMap<Long, Allocation> ALLOCATIONS = new ConcurrentHashMap<>();
-		private static final ConcurrentMap<Long, String>     THREADS     = new ConcurrentHashMap<>();
+        @Override
+        public long realloc(long ptr, long size) {
+            long address = allocator.realloc(ptr, size);
 
-		private final MemoryAllocator allocator;
+            if (size == 0L) {
+                if (ptr != NULL) {
+                    untrack(ptr);
+                }
+            } else if (address != NULL) {
+                if (ptr != NULL) {
+                    untrack(ptr);
+                }
+                track(address, size);
+            }
 
-		DebugAllocator(MemoryAllocator allocator) {
-			this.allocator = allocator;
+            return address;
+        }
 
-			Runtime.getRuntime().addShutdownHook(new Thread() {
-				@Override
-				public void run() {
-					if ( ALLOCATIONS.isEmpty() )
-						return;
+        @Override
+        public void free(long ptr) {
+            allocator.free(ptr);
+            untrack(ptr);
+        }
 
-					for ( Entry<Long, Allocation> entry : ALLOCATIONS.entrySet() ) {
-						Long address = entry.getKey();
-						Allocation allocation = entry.getValue();
+        @Override
+        public long aligned_alloc(long alignment, long size) {
+            return track(allocator.aligned_alloc(alignment, size), size);
+        }
 
-						DEBUG_STREAM.format(
-							"[LWJGL] %d bytes leaked, thread %d (%s), address: 0x%s\n",
-							allocation.size,
-							allocation.threadId,
-							THREADS.get(allocation.threadId),
-							Long.toHexString(address).toUpperCase()
-						);
-						for ( StackTraceElement el : allocation.stackTrace )
-							DEBUG_STREAM.format("\tat %s\n", el.toString());
-					}
-				}
-			});
-		}
+        @Override
+        public void aligned_free(long ptr) {
+            allocator.aligned_free(ptr);
+            untrack(ptr);
+        }
 
-		@Override
-		public long getMalloc() { return allocator.getMalloc(); }
+        static long track(long address, long size) {
+            if (address != NULL) {
+                Thread t        = Thread.currentThread();
+                Long   threadId = t.getId();
+                if (!THREADS.containsKey(threadId)) {
+                    THREADS.put(threadId, t.getName());
+                }
 
-		@Override
-		public long getCalloc() { return allocator.getCalloc(); }
+                Allocation allocation = ALLOCATIONS.put(address, new Allocation(stackWalkGetTrace(4, MemoryUtil.class), size));
+                if (allocation != null) {
+                    throw new IllegalStateException("The memory address specified is already being tracked");
+                }
+            }
 
-		@Override
-		public long getRealloc() { return allocator.getRealloc(); }
+            return address;
+        }
 
-		@Override
-		public long getFree() { return allocator.getFree(); }
+        static void untrack(long address) {
+            if (address == NULL) {
+                return;
+            }
 
-		@Override
-		public long getAlignedAlloc() { return allocator.getAlignedAlloc(); }
+            Allocation allocation = ALLOCATIONS.remove(address);
+            if (allocation == null) {
+                throw new IllegalStateException("The memory address specified is not being tracked");
+            }
+        }
 
-		@Override
-		public long getAlignedFree() { return allocator.getAlignedFree(); }
+        private static class Allocation {
 
-		@Override
-		public long malloc(long size) {
-			return track(allocator.malloc(size), size);
-		}
+            private final Object[] stackTrace;
 
-		@Override
-		public long calloc(long num, long size) {
-			return track(allocator.calloc(num, size), num * size);
-		}
+            private StackTraceElement[] elements; // lazy init
 
-		@Override
-		public long realloc(long ptr, long size) {
-			long address = allocator.realloc(ptr, size);
-			if ( address != NULL )
-				untrack(ptr);
-			return track(address, size);
-		}
+            final long size;
+            final long threadId;
 
-		@Override
-		public void free(long ptr) {
-			allocator.free(ptr);
-			untrack(ptr);
-		}
+            Allocation(Object[] stackTrace, long size) {
+                this.stackTrace = stackTrace;
+                this.size = size;
+                this.threadId = Thread.currentThread().getId();
+            }
 
-		@Override
-		public long aligned_alloc(long alignment, long size) {
-			return track(allocator.aligned_alloc(alignment, size), size);
-		}
+            private StackTraceElement[] getElements() {
+                if (elements == null) {
+                    elements = stackWalkArray(stackTrace);
+                }
 
-		@Override
-		public void aligned_free(long ptr) {
-			allocator.aligned_free(ptr);
-			untrack(ptr);
-		}
+                return elements;
+            }
 
-		static long track(long address, long size) {
-			if ( address != NULL ) {
-				Thread t = Thread.currentThread();
-				Long threadId = t.getId();
-				if ( !THREADS.containsKey(threadId) )
-					THREADS.put(threadId, t.getName());
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
 
-				StackTraceElement[] stackTrace = t.getStackTrace();
-				int depth = Math.min(stackTrace.length, 4);
-				for ( ; depth < stackTrace.length; depth++ ) {
-					if ( !"org.lwjgl.system.MemoryUtil".equals(stackTrace[depth].getClassName()) )
-						break;
-				}
+                Allocation that = (Allocation)o;
 
-				Allocation allocation = ALLOCATIONS.put(address, new Allocation(Arrays.copyOfRange(stackTrace, depth, stackTrace.length), size));
-				if ( allocation != null )
-					throw new IllegalStateException("The memory address specified is already being tracked");
-			}
+                return Arrays.equals(this.getElements(), that.getElements());
+            }
 
-			return address;
-		}
+            @Override
+            public int hashCode() {
+                return Arrays.hashCode(getElements());
+            }
 
-		static void untrack(long address) {
-			if ( address == NULL )
-				return;
+        }
 
-			Allocation allocation = ALLOCATIONS.remove(address);
-			if ( allocation == null )
-				throw new IllegalStateException("The memory address specified is not being tracked");
-		}
+        static void report(MemoryAllocationReport report) {
+            for (Allocation allocation : ALLOCATIONS.values()) {
+                report.invoke(allocation.size, allocation.threadId, THREADS.get(allocation.threadId), allocation.getElements());
+            }
+        }
 
-		private static class Allocation {
+        private static <T> void aggregate(T t, long size, Map<T, AtomicLong> map) {
+            AtomicLong node = map.computeIfAbsent(t, k -> new AtomicLong());
+            node.set(node.get() + size);
+        }
 
-			final StackTraceElement[] stackTrace;
+        static void report(
+            MemoryAllocationReport report,
+            MemoryAllocationReport.Aggregate groupByStackTrace,
+            boolean groupByThread
+        ) {
+            // Using atomic long for the mutability, no concurrency here
+            switch (groupByStackTrace) {
+                case ALL:
+                    if (groupByThread) {
+                        Map<Long, AtomicLong> mapThread = new HashMap<>();
+                        for (Allocation allocation : ALLOCATIONS.values()) {
+                            aggregate(allocation.threadId, allocation.size, mapThread);
+                        }
+                        for (Entry<Long, AtomicLong> entry : mapThread.entrySet()) {
+                            report.invoke(entry.getValue().get(), entry.getKey(), THREADS.get(entry.getKey()), (StackTraceElement[])null);
+                        }
+                    } else {
+                        long total = 0L;
+                        for (Allocation allocation : ALLOCATIONS.values()) {
+                            total += allocation.size;
+                        }
+                        report.invoke(total, NULL, null, (StackTraceElement[])null);
+                    }
+                    break;
+                case GROUP_BY_METHOD:
+                    // Group by stackTrace[0]
+                    if (groupByThread) {
+                        Map<Long, Map<StackTraceElement, AtomicLong>> mapThreadMethod = new HashMap<>();
+                        for (Allocation allocation : ALLOCATIONS.values()) {
+                            Map<StackTraceElement, AtomicLong> mapMethod = mapThreadMethod.computeIfAbsent(allocation.threadId, k -> new HashMap<>());
+                            aggregate(allocation.getElements()[0], allocation.size, mapMethod);
+                        }
 
-			final long size;
+                        for (Entry<Long, Map<StackTraceElement, AtomicLong>> tms : mapThreadMethod.entrySet()) {
+                            long                               threadId     = tms.getKey();
+                            Map<StackTraceElement, AtomicLong> mapmapMethod = tms.getValue();
 
-			final long threadId;
+                            for (Entry<StackTraceElement, AtomicLong> ms : mapmapMethod.entrySet()) {
+                                report.invoke(ms.getValue().get(), threadId, THREADS.get(threadId), ms.getKey());
+                            }
+                        }
+                    } else {
+                        Map<StackTraceElement, AtomicLong> mapMethod = new HashMap<>();
+                        for (Allocation allocation : ALLOCATIONS.values()) {
+                            aggregate(allocation.getElements()[0], allocation.size, mapMethod);
+                        }
+                        for (Entry<StackTraceElement, AtomicLong> ms : mapMethod.entrySet()) {
+                            report.invoke(ms.getValue().get(), NULL, null, ms.getKey());
+                        }
+                    }
+                    break;
+                case GROUP_BY_STACKTRACE:
+                    // Group by stackTrace[]
+                    if (groupByThread) {
+                        Map<Long, Map<Allocation, AtomicLong>> mapThreadStackTrace = new HashMap<>();
+                        for (Allocation allocation : ALLOCATIONS.values()) {
+                            Map<Allocation, AtomicLong> mapStackTrace = mapThreadStackTrace.computeIfAbsent(allocation.threadId, k -> new HashMap<>());
+                            aggregate(allocation, allocation.size, mapStackTrace);
+                        }
 
-			Allocation(StackTraceElement[] stackTrace, long size) {
-				this.stackTrace = stackTrace;
-				this.size = size;
-				this.threadId = Thread.currentThread().getId();
-			}
+                        for (Entry<Long, Map<Allocation, AtomicLong>> tss : mapThreadStackTrace.entrySet()) {
+                            long                        threadId      = tss.getKey();
+                            Map<Allocation, AtomicLong> mapStackTrace = tss.getValue();
 
-			@Override
-			public boolean equals(Object o) {
-				if ( this == o ) return true;
-				if ( o == null || getClass() != o.getClass() ) return false;
+                            for (Entry<Allocation, AtomicLong> ss : mapStackTrace.entrySet()) {
+                                report.invoke(ss.getValue().get(), threadId, THREADS.get(threadId), ss.getKey().getElements());
+                            }
+                        }
+                    } else {
+                        Map<Allocation, AtomicLong> mapStackTrace = new HashMap<>();
+                        for (Allocation allocation : ALLOCATIONS.values()) {
+                            aggregate(allocation, allocation.size, mapStackTrace);
+                        }
+                        for (Entry<Allocation, AtomicLong> ss : mapStackTrace.entrySet()) {
+                            report.invoke(ss.getValue().get(), NULL, null, ss.getKey().getElements());
+                        }
+                    }
+                    break;
+            }
+        }
 
-				Allocation that = (Allocation)o;
-
-				return Arrays.equals(stackTrace, that.stackTrace);
-			}
-
-			@Override
-			public int hashCode() {
-				return Arrays.hashCode(stackTrace);
-			}
-
-		}
-
-		static void report(MemoryAllocationReport report) {
-			for ( Allocation allocation : ALLOCATIONS.values() )
-				report.invoke(allocation.size, allocation.threadId, THREADS.get(allocation.threadId), allocation.stackTrace);
-		}
-
-		private static <T> void aggregate(T t, long size, Map<T, AtomicLong> map) {
-			AtomicLong node = map.get(t);
-			if ( node == null )
-				map.put(t, node = new AtomicLong());
-			node.set(node.get() + size);
-		}
-
-		static void report(
-			MemoryAllocationReport report,
-			MemoryAllocationReport.Aggregate groupByStackTrace,
-			boolean groupByThread
-		) {
-			// Using atomic long for the mutability, no concurrency here
-			switch ( groupByStackTrace ) {
-				case ALL:
-					if ( groupByThread ) {
-						Map<Long, AtomicLong> mapThread = new HashMap<>();
-						for ( Allocation allocation : ALLOCATIONS.values() )
-							aggregate(allocation.threadId, allocation.size, mapThread);
-						for ( Entry<Long, AtomicLong> entry : mapThread.entrySet() )
-							report.invoke(entry.getValue().get(), entry.getKey(), THREADS.get(entry.getKey()), (StackTraceElement[])null);
-					} else {
-						long total = 0L;
-						for ( Allocation allocation : ALLOCATIONS.values() )
-							total += allocation.size;
-						report.invoke(total, NULL, null, (StackTraceElement[])null);
-					}
-					break;
-				case GROUP_BY_METHOD:
-					// Group by StackTraceElement[0]
-					if ( groupByThread ) {
-						Map<Long, Map<StackTraceElement, AtomicLong>> mapThreadMethod = new HashMap<>();
-						for ( Allocation allocation : ALLOCATIONS.values() ) {
-							Map<StackTraceElement, AtomicLong> mapMethod = mapThreadMethod.get(allocation.threadId);
-							if ( mapMethod == null )
-								mapThreadMethod.put(allocation.threadId, mapMethod = new HashMap<>());
-							aggregate(allocation.stackTrace[0], allocation.size, mapMethod);
-						}
-
-						for ( Entry<Long, Map<StackTraceElement, AtomicLong>> tms : mapThreadMethod.entrySet() ) {
-							long threadId = tms.getKey();
-							Map<StackTraceElement, AtomicLong> mapmapMethod = tms.getValue();
-
-							for ( Entry<StackTraceElement, AtomicLong> ms : mapmapMethod.entrySet() )
-								report.invoke(ms.getValue().get(), threadId, THREADS.get(threadId), ms.getKey());
-						}
-					} else {
-						Map<StackTraceElement, AtomicLong> mapMethod = new HashMap<>();
-						for ( Allocation allocation : ALLOCATIONS.values() )
-							aggregate(allocation.stackTrace[0], allocation.size, mapMethod);
-						for ( Entry<StackTraceElement, AtomicLong> ms : mapMethod.entrySet() )
-							report.invoke(ms.getValue().get(), NULL, null, ms.getKey());
-					}
-					break;
-				case GROUP_BY_STACKTRACE:
-					// Group by StackTraceElement[]
-					if ( groupByThread ) {
-						Map<Long, Map<Allocation, AtomicLong>> mapThreadStackTrace = new HashMap<>();
-						for ( Allocation allocation : ALLOCATIONS.values() ) {
-							Map<Allocation, AtomicLong> mapStackTrace = mapThreadStackTrace.get(allocation.threadId);
-							if ( mapStackTrace == null )
-								mapThreadStackTrace.put(allocation.threadId, mapStackTrace = new HashMap<>());
-							aggregate(allocation, allocation.size, mapStackTrace);
-						}
-
-						for ( Entry<Long, Map<Allocation, AtomicLong>> tss : mapThreadStackTrace.entrySet() ) {
-							long threadId = tss.getKey();
-							Map<Allocation, AtomicLong> mapStackTrace = tss.getValue();
-
-							for ( Entry<Allocation, AtomicLong> ss : mapStackTrace.entrySet() )
-								report.invoke(ss.getValue().get(), threadId, THREADS.get(threadId), ss.getKey().stackTrace);
-						}
-					} else {
-						Map<Allocation, AtomicLong> mapStackTrace = new HashMap<>();
-						for ( Allocation allocation : ALLOCATIONS.values() )
-							aggregate(allocation, allocation.size, mapStackTrace);
-						for ( Entry<Allocation, AtomicLong> ss : mapStackTrace.entrySet() )
-							report.invoke(ss.getValue().get(), NULL, null, ss.getKey().stackTrace);
-					}
-					break;
-			}
-		}
-
-	}
+    }
 
 }

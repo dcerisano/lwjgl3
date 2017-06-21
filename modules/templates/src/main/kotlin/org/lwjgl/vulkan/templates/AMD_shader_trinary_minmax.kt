@@ -1,49 +1,71 @@
 /*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
+ * MACHINE GENERATED FILE, DO NOT EDIT
  */
 package org.lwjgl.vulkan.templates
 
 import org.lwjgl.generator.*
 import org.lwjgl.vulkan.*
 
-val AMD_shader_trinary_minmax = "AMDShaderTrinaryMinmax".nativeClassVK("AMD_shader_trinary_minmax", postfix = AMD) {
-	documentation =
-		"""
-		When the {@code VK_AMD_shader_trinary_minmax} device extension is enabled the application $can pass a SPIR-V module to #CreateShaderModule() that uses
-		the {@code SPV_AMD_shader_trinary_minmax} SPIR-V extension.
+val AMD_shader_trinary_minmax = "AMDShaderTrinaryMinmax".nativeClassVK("AMD_shader_trinary_minmax", type = "device", postfix = AMD) {
+    documentation =
+        """
+        This extension adds support for the following SPIR-V extension in {apiname}:
 
-		This extension is written to provide the functionality of the {@code AMD_shader_trinary_minmax}, OpenGL Shading Language Specification extension, for
-		SPIR-V.
+        <ul>
+            <li>SPV_AMD_shader_trinary_minmax</li>
+        </ul>
 
-		This extension introduces nine new trinary extended instructions to SPIR-V. These functions allow the minimum, maximum or median of three inputs to be
-		found with a single function call. These operations may be useful for sorting and filtering operations, for example. By explicitly performing a trinary
-		operation with a single built-in function, shader compilers and optimizers may be able to generate better instruction sequences to perform sorting and
-		to other multi-input functions.
+        <dl>
+            <dt><b>Name String</b></dt>
+            <dd>VK_AMD_shader_trinary_minmax</dd>
 
-		This extension adds the following extended instructions:
-		${ul(
-			"FMin3AMD",
-			"UMin3AMD",
-			"SMin3AMD",
-			"FMax3AMD",
-			"UMax3AMD",
-			"SMax3AMD",
-			"FMid3AMD",
-			"UMid3AMD",
-			"SMid3AMD"
-		)}
-		"""
+            <dt><b>Extension Type</b></dt>
+            <dd>Device extension</dd>
 
-	IntConstant(
-		"The extension specification version.",
+            <dt><b>Registered Extension Number</b></dt>
+            <dd>21</dd>
 
-		"AMD_SHADER_TRINARY_MINMAX_SPEC_VERSION".."1"
-	)
+            <dt><b>Last Modified Date</b></dt>
+            <dd>2016-05-10</dd>
 
-	StringConstant(
-		"The extension name.",
+            <dt><b>Revision</b></dt>
+            <dd>1</dd>
 
-		"AMD_SHADER_TRINARY_MINMAX_EXTENSION_NAME".."VK_AMD_shader_trinary_minmax"
-	)
+            <dt><b>IP Status</b></dt>
+            <dd>No known IP claims.</dd>
+
+            <dt><b>Dependencies</b></dt>
+            <dd><ul>
+                <li>This extension is written against version 1.0.11 of the Vulkan API.</li>
+            </ul></dd>
+
+            <dt><b>Contributors</b></dt>
+            <dd><ul>
+                <li>Matthaeus G. Chajdas, AMD</li>
+                <li>Qun Lin, AMD</li>
+                <li>Daniel Rakos, AMD</li>
+                <li>Graham Sellers, AMD</li>
+                <li>Rex Xu, AMD</li>
+            </ul></dd>
+
+            <dt><b>Contacts</b></dt>
+            <dd><ul>
+                <li>Qun Lin, AMD (mailto:quentin.lin@amd.com[quentin.lin@amd.com])</li>
+            </ul></dd>
+        </dl>
+        """
+
+    IntConstant(
+        "The extension specification version.",
+
+        "AMD_SHADER_TRINARY_MINMAX_SPEC_VERSION".."1"
+    )
+
+    StringConstant(
+        "The extension name.",
+
+        "AMD_SHADER_TRINARY_MINMAX_EXTENSION_NAME".."VK_AMD_shader_trinary_minmax"
+    )
 }

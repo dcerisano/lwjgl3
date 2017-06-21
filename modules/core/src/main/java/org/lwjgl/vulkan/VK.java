@@ -1,22 +1,20 @@
 /*
  * Copyright LWJGL. All rights reserved.
- * License terms: http://lwjgl.org/license.php
+ * License terms: https://www.lwjgl.org/license
  */
 package org.lwjgl.vulkan;
 
-import org.lwjgl.PointerBuffer;
+import org.lwjgl.*;
 import org.lwjgl.system.*;
 
-import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 import static java.lang.Math.*;
 import static org.lwjgl.system.APIUtil.*;
 import static org.lwjgl.system.JNI.*;
+import static org.lwjgl.system.MemoryStack.*;
 import static org.lwjgl.system.MemoryUtil.*;
-import static org.lwjgl.vulkan.VKUtil.*;
+import static org.lwjgl.vulkan.VK10.*;
 
 /**
  * This class loads the Vulkan library into the JVM process.
@@ -26,152 +24,161 @@ import static org.lwjgl.vulkan.VKUtil.*;
  */
 public final class VK {
 
-	private static FunctionProvider functionProvider;
+    private static FunctionProvider functionProvider;
 
-	private static VKCapabilities globalCommands;
+    private static GlobalCommands globalCommands;
 
-	static {
-		if ( !Configuration.VULKAN_EXPLICIT_INIT.get(false) )
-			create();
-	}
+    static {
+        if (!Configuration.VULKAN_EXPLICIT_INIT.get(false)) {
+            create();
+        }
+    }
 
-	private VK() {}
+    private VK() {}
 
-	/**
-	 * Loads the Vulkan shared library, using the default library name.
-	 *
-	 * @see #create(String)
-	 */
-	public static void create() {
-		SharedLibrary VK;
-		switch ( Platform.get() ) {
-			case LINUX:
-				VK = Library.loadNative(Configuration.VULKAN_LIBRARY_NAME, "libvulkan.so.1");
-				break;
-			case WINDOWS:
-				VK = Library.loadNative(Configuration.VULKAN_LIBRARY_NAME, "vulkan-1");
-				break;
-			case MACOSX:
-				VK = Library.loadNative(Configuration.VULKAN_LIBRARY_NAME); // there may be Vulkan-over-Metal emulation libraries on OS X
-				break;
-			default:
-				throw new IllegalStateException();
-		}
-		create(VK);
-	}
+    /**
+     * Loads the Vulkan shared library, using the default library name.
+     *
+     * @see #create(String)
+     */
+    public static void create() {
+        SharedLibrary VK;
+        switch (Platform.get()) {
+            case LINUX:
+                VK = Library.loadNative(VK.class, Configuration.VULKAN_LIBRARY_NAME, "libvulkan.so.1");
+                break;
+            case WINDOWS:
+                VK = Library.loadNative(VK.class, Configuration.VULKAN_LIBRARY_NAME, "vulkan-1");
+                break;
+            case MACOSX:
+                VK = Library.loadNative(VK.class, Configuration.VULKAN_LIBRARY_NAME); // Vulkan-over-Metal emulation, e.g. MoltenVK
+                break;
+            default:
+                throw new IllegalStateException();
+        }
+        create(VK);
+    }
 
-	/**
-	 * Loads the Vulkan shared library, using the specified library name.
-	 *
-	 * <p>The {@link FunctionProvider} instance created by this method can only be used to retrieve global commands and commands exposed statically by the
-	 * Vulkan shared library.</p>
-	 *
-	 * @param libName the shared library name
-	 *
-	 * @see #create(FunctionProvider)
-	 */
-	public static void create(String libName) {
-		create(Library.loadNative(libName));
-	}
+    /**
+     * Loads the Vulkan shared library, using the specified library name.
+     *
+     * <p>The {@link FunctionProvider} instance created by this method can only be used to retrieve global commands and commands exposed statically by the
+     * Vulkan shared library.</p>
+     *
+     * @param libName the shared library name
+     *
+     * @see #create(FunctionProvider)
+     */
+    public static void create(String libName) {
+        create(Library.loadNative(VK.class, libName));
+    }
 
-	private static void create(SharedLibrary VULKAN) {
-		try {
-			create((FunctionProvider)new SharedLibrary.Delegate(VULKAN) {
-				private final long GetInstanceProcAddr = library.getFunctionAddress("vkGetInstanceProcAddr");
+    /**
+     * Initializes Vulkan with the specified {@link FunctionProvider}. This method can be used to implement custom Vulkan library loading.
+     *
+     * @param functionProvider the provider of Vulkan function addresses
+     */
+    public static void create(FunctionProvider functionProvider) {
+        if (VK.functionProvider != null) {
+            throw new IllegalStateException("Vulkan has already been created.");
+        }
 
-				{
-					if ( GetInstanceProcAddr == NULL )
-						throw new IllegalStateException("A core Vulkan function is missing. Make sure that Vulkan is available.");
-				}
+        VK.functionProvider = functionProvider;
+        globalCommands = new GlobalCommands(functionProvider);
+    }
 
-				@Override
-				public long getFunctionAddress(ByteBuffer functionName) {
-					long address = callPPP(GetInstanceProcAddr, NULL, memAddress(functionName));
-					if ( address == NULL ) {
-						address = library.getFunctionAddress(functionName);
-						if ( address == NULL && Checks.DEBUG_FUNCTIONS )
-							apiLog("Failed to locate address for VK function " + memASCII(functionName));
-					}
+    /** Unloads the Vulkan shared library. */
+    public static void destroy() {
+        if (functionProvider == null) {
+            return;
+        }
 
-					return address;
-				}
-			});
-		} catch (RuntimeException e) {
-			VULKAN.free();
-			throw e;
-		}
-	}
+        if (functionProvider instanceof NativeResource) {
+            ((NativeResource)functionProvider).free();
+        }
+        functionProvider = null;
+        globalCommands = null;
+    }
 
-	/**
-	 * Initializes Vulkan with the specified {@link FunctionProvider}. This method can be used to implement custom Vulkan library loading.
-	 *
-	 * @param functionProvider the provider of Vulkan function addresses
-	 */
-	public static void create(FunctionProvider functionProvider) {
-		if ( VK.functionProvider != null )
-			throw new IllegalStateException("Vulkan has already been created.");
+    /** Returns the {@link FunctionProvider} for the Vulkan shared library. */
+    public static FunctionProvider getFunctionProvider() {
+        return functionProvider;
+    }
 
-		VK.functionProvider = functionProvider;
+    static class GlobalCommands {
 
-		globalCommands = new VKCapabilities(functionProvider, 0, Collections.emptySet());
-		if ( globalCommands.vkCreateInstance == NULL ||
-			globalCommands.vkEnumerateInstanceExtensionProperties == NULL ||
-			globalCommands.vkEnumerateInstanceLayerProperties == NULL )
-			throw new IllegalStateException("Vulkan 1.0 is missing. Make sure that Vulkan is available.");
-	}
+        final long vkGetInstanceProcAddr;
 
-	/** Unloads the Vulkan shared library. */
-	public static void destroy() {
-		if ( functionProvider == null )
-			return;
+        final long vkCreateInstance;
+        final long vkEnumerateInstanceExtensionProperties;
+        final long vkEnumerateInstanceLayerProperties;
 
-		if ( functionProvider instanceof NativeResource )
-			((NativeResource)functionProvider).free();
-		functionProvider = null;
-		globalCommands = null;
-	}
+        GlobalCommands(FunctionProvider library) {
+            vkGetInstanceProcAddr = library.getFunctionAddress("vkGetInstanceProcAddr");
+            if (vkGetInstanceProcAddr == NULL) {
+                throw new IllegalArgumentException("A critical function is missing. Make sure that Vulkan is available.");
+            }
 
-	/** Returns the {@link FunctionProvider} for the Vulkan shared library. */
-	public static FunctionProvider getFunctionProvider() {
-		return functionProvider;
-	}
+            vkCreateInstance = getFunctionAddress("vkCreateInstance");
+            vkEnumerateInstanceExtensionProperties = getFunctionAddress("vkEnumerateInstanceExtensionProperties");
+            vkEnumerateInstanceLayerProperties = getFunctionAddress("vkEnumerateInstanceLayerProperties");
+        }
 
-	/** Returns the {@link VKCapabilities} instance for global commands. */
-	static VKCapabilities getGlobalCommands() { return globalCommands; }
+        private long getFunctionAddress(String name) {
+            try (MemoryStack stack = stackPush()) {
+                long address = callPPP(vkGetInstanceProcAddr, NULL, memAddress(stack.ASCII(name)));
+                if (address == NULL) {
+                    throw new IllegalArgumentException("A critical function is missing. Make sure that Vulkan is available.");
+                }
+                return address;
+            }
+        }
+    }
 
-	static Set<String> getEnabledExtensionSet(int apiVersion, PointerBuffer extensionNames) {
-		Set<String> enabledExtensions = new HashSet<>(16);
+    /** Returns the Vulkan global commands. */
+    static GlobalCommands getGlobalCommands() { return globalCommands; }
 
-		int majorVersion = VK_VERSION_MAJOR(apiVersion);
-		int minorVersion = VK_VERSION_MINOR(apiVersion);
+    static Set<String> getEnabledExtensionSet(int apiVersion, PointerBuffer extensionNames) {
+        Set<String> enabledExtensions = new HashSet<>(16);
 
-		int[] VK_VERSIONS = {
-			0, // Vulkan 1.0
-		};
+        int majorVersion = VK_VERSION_MAJOR(apiVersion);
+        int minorVersion = VK_VERSION_MINOR(apiVersion);
 
-		int maxMajor = min(majorVersion, VK_VERSIONS.length);
-		for ( int M = 1; M <= maxMajor; M++ ) {
-			int maxMinor = VK_VERSIONS[M - 1];
-			if ( M == majorVersion )
-				maxMinor = min(minorVersion, maxMinor);
-			for ( int m = 0; m <= maxMinor; m++ )
-				enabledExtensions.add(String.format("Vulkan%d%d", M, m));
-		}
+        int[] VK_VERSIONS = {
+            0, // Vulkan 1.0
+        };
 
-		if ( extensionNames != null ) {
-			for ( int i = extensionNames.position(); i < extensionNames.limit(); i++ )
-				enabledExtensions.add(extensionNames.getStringUTF8(i));
-		}
+        int maxMajor = min(majorVersion, VK_VERSIONS.length);
+        for (int M = 1; M <= maxMajor; M++) {
+            int maxMinor = VK_VERSIONS[M - 1];
+            if (M == majorVersion) {
+                maxMinor = min(minorVersion, maxMinor);
+            }
+            for (int m = 0; m <= maxMinor; m++) {
+                enabledExtensions.add(String.format("Vulkan%d%d", M, m));
+            }
+        }
 
-		return enabledExtensions;
-	}
+        if (extensionNames != null) {
+            for (int i = extensionNames.position(); i < extensionNames.limit(); i++) {
+                enabledExtensions.add(extensionNames.getStringUTF8(i));
+            }
+        }
 
-	static <T> T checkExtension(String extension, T functions) {
-		if ( functions != null )
-			return functions;
+        return enabledExtensions;
+    }
 
-		apiLog("[VK] " + extension + " was reported as available but an entry point is missing.");
-		return null;
-	}
+    static <T> T checkExtension(String extension, T functions) {
+        if (functions != null) {
+            return functions;
+        }
+
+        apiLog("[VK] " + extension + " was reported as available but an entry point is missing.");
+        return null;
+    }
+
+    static long isSupported(FunctionProvider provider, String functionName, boolean extensionSupported) {
+        return extensionSupported ? provider.getFunctionAddress(functionName) : NULL;
+    }
 
 }
